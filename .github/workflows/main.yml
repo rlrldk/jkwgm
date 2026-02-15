@@ -2,12 +2,18 @@ name: Login to Majsoul
 
 on:
   schedule:
-    - cron: '5 21 * * *'  # 21:05 UTC time (6:05 a.m. Korean time)
+    - cron: '5 21 * * *'
   workflow_dispatch:
 
 jobs:
   run-script:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 서버 이름을 명시적으로 나눕니다.
+        server: [JP, EN]
+
     steps:
     - name: Checkout repository
       uses: actions/checkout@v2
@@ -19,22 +25,24 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
         pip install -r requirements.txt
 
     - name: Execute main.py
       run: python main.py
       env:
-        UID: ${{ secrets.UID }}
-        TOKEN: ${{ secrets.TOKEN }}
+        # JP일 때는 UID/TOKEN, EN일 때는 UID2/TOKEN2를 사용하도록 명시
+        UID: ${{ matrix.server == 'JP' && secrets.UID || secrets.UID2 }}
+        TOKEN: ${{ matrix.server == 'JP' && secrets.TOKEN || secrets.TOKEN2 }}
+        # EN 서버일 때만 호스트 주소를 넣어줍니다.
+        MS_HOST: ${{ matrix.server == 'EN' && 'https://mahjongsoul.game.yo-star.com/' || '' }}
 
     - name: Update Keep-Alive File
       run: |
-        echo "Last run: $(date)" > keep_alive.txt
+        echo "Last run (${{ matrix.server }}): $(date)" > keep_alive_${{ matrix.server }}.txt
         git config --global user.name "github-actions[bot]"
         git config --global user.email "github-actions[bot]@users.noreply.github.com"
-        git add keep_alive.txt
-        git commit -m "Keep-alive: Update timestamp"
-        git push
+        git add keep_alive_${{ matrix.server }}.txt
+        git commit -m "Keep-alive: ${{ matrix.server }} updated" || exit 0
+        git push || exit 0
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
